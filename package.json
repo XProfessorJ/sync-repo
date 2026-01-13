@@ -1,0 +1,30 @@
+{
+  "name": "sync-repo",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "ts-node refresh-web-page.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XProfessorJ/sync-repo.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/XProfessorJ/sync-repo/issues"
+  },
+  "homepage": "https://github.com/XProfessorJ/sync-repo#readme",
+  "dependencies": {
+    "@types/node": "^25.0.7",
+    "selenium-webdriver": "^4.39.0"
+  },
+  "devDependencies": {
+    "@types/selenium-webdriver": "^4.35.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
