@@ -1,3 +1,4 @@
+// generate-thymeleaf-template.mjs
 import fs from 'fs';
 import path from 'path';
 
@@ -20,34 +21,35 @@ try {
 }
 
 // 3. 定义正则表达式 (全局匹配 g)
-// 匹配 link[rel=stylesheet] 和 script 标签
-// 这个正则会捕获: [完整标签, 资源类型(css|js), 属性值(href|src), 文件路径]
 const REG_ASSET = /<(link|script)[^>]+(href|src)="([^"]+)"[^>]*>/g;
-const REG_REL = /\srel="([^"]+)"/; // 辅助正则，用于检测 link 的 rel 属性
 
 // 4. 提取所有资源
 const cssFiles = [];
 const jsFiles = {
-  sync: [],   // 同步脚本 (没有 async/defer 的)
-  async: []   // 异步脚本 (包含 async, module, 或者被标记为 chunk 的)
+  sync: [],   // 同步脚本
+  async: []   // 异步脚本
 };
 
 // 执行匹配
 let match;
 while ((match = REG_ASSET.exec(htmlContent)) !== null) {
-  const tag = match[1]; // 'link' 或 'script'
-  const attr = match[2]; // 'href' 或 'src'
-  const filePath = match[3]; // '/assets/main.js', '/assets/style.css' 等
+  const tag = match[1];
+  const attr = match[2];
+  const filePath = match[3];
   const fileName = path.basename(filePath);
-  const fullTag = match[0]; // 完整的标签字符串，用于分析属性
+  const fullTag = match[0]; // 完整的标签文本
 
-  // 过滤掉非 js/css 的资源 (比如 favicon)
+  // 处理 CSS
   if (fileName.endsWith('.css')) {
     cssFiles.push(fileName);
-  } else if (fileName.endsWith('.js')) {
-    // 判断是否为异步/模块脚本
-    // Vite 生成的异步 Chunk 通常包含 module, async 属性，或者文件名包含 hash
-    if (fullTag.includes('type="module"') || full\Tag.includes('async') || fullTag.includes('defer')) {
+  } 
+  // 处理 JS
+  else if (fileName.endsWith('.js')) {
+    // 修复点1: 修正了 full\Tag 的拼写错误
+    // 修复点2: 在 async/defer 前加空格，确保匹配的是属性而不是文件名
+    if (fullTag.includes('type="module"') || 
+        fullTag.includes(' async') || 
+        fullTag.includes(' defer')) {
       jsFiles.async.push(fileName);
     } else {
       jsFiles.sync.push(fileName);
@@ -60,29 +62,30 @@ console.log(`🔍 检测到 同步 JS:`, jsFiles.sync.length > 0 ? jsFiles.sync 
 console.log(`🔍 检测到 异步 JS:`, jsFiles.async.length > 0 ? jsFiles.async : '无');
 
 // 5. 构建 Thymeleaf 模板字符串
-// 策略：
-// 1. CSS 全部引入 (Thymeleaf 会自动处理路径)
-// 2. JS 分开引入：
-//    - 同步 JS 放在 body 底部 (如果有)
-//    - 异步 JS 使用 th:src 并加上 async 或 defer 属性
-
 let cssImports = '';
-cssFiles.forEach(file => {
-  cssImports += `    <link th:href="@{/${file}}" rel="stylesheet" />\n`;
-});
+if (cssFiles.length === 0) {
+  console.warn('⚠️ 未检测到 CSS 文件，将使用默认 resource.css');
+  cssImports = '    <link th:href="@{/resource.css}" rel="stylesheet" />\n';
+} else {
+  cssFiles.forEach(file => {
+    cssImports += `    <link th:href="@{/${file}}" rel="stylesheet" />\n`;
+  });
+}
 
 let jsImports = '';
-// 引入同步 JS (通常只有一个入口文件)
+
+// 引入同步 JS (如果有)
 jsFiles.sync.forEach(file => {
   jsImports += `    <script th:src="@{/${file}}"></script>\n`;
 });
 
-// 引入异步 JS (Vite 的 Chunk)
+// 引入异步 JS (Vite Chunk)
 jsFiles.async.forEach(file => {
-  // Vite 的模块通常需要 type="module"，如果是 legacy 模式可能是 async
-  // 这里根据你的实际需求调整，如果是现代浏览器，建议保留 module
+  // 根据你的 Vite 构建模式选择:
+  // 方案A (推荐): 现代模式 - 使用 type="module"
   jsImports += `    <script th:src="@{/${file}}" type="module"></script>\n`;
-  // 如果是传统模式，使用下面这行：
+  
+  // 方案B: 传统模式 - 使用 async
   // jsImports += `    <script th:src="@{/${file}}" async></script>\n`;
 });
 
@@ -104,7 +107,6 @@ function ensureDirAndWrite(file, content) {
   try {
     const dir = path.dirname(file);
 
-    // 检查目录是否存在
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
       console.log(`✅ 创建目录: ${dir}`);
