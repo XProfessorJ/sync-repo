@@ -20,73 +20,42 @@ try {
   process.exit(1);
 }
 
-// 3. 定义正则表达式 (全局匹配 g)
-const REG_ASSET = /<(link|script)[^>]+(href|src)="([^"]+)"[^>]*>/g;
+// --- 修改开始 ---
+// 3. 定义正则表达式 (添加全局标志 'g')
+// 我们用一个正则同时匹配 link 和 script
+const REG_ASSETS = /<(?:link|script)[^>]+(?:href|src)="([^"]+\.(?:css|js))"[^>]*>/g;
 
-// 4. 提取所有资源
-const cssFiles = [];
-const jsFiles = {
-  sync: [],   // 同步脚本
-  async: []   // 异步脚本
-};
+// 4. 提取所有文件名
+let cssFileName = 'resource.css'; // 默认值
+let jsFileNames = ['main.js'];    // 默认值 (注意这里变成了数组)
 
-// 执行匹配
-let match;
-while ((match = REG_ASSET.exec(htmlContent)) !== null) {
-  const tag = match[1];
-  const attr = match[2];
-  const filePath = match[3];
+const matchedFiles = [...htmlContent.matchAll(REG_ASSETS)];
+
+matchedFiles.forEach(match => {
+  const filePath = match[1]; // 捕获组 1 是文件路径
   const fileName = path.basename(filePath);
-  const fullTag = match[0]; // 完整的标签文本
-
-  // 处理 CSS
+  
   if (fileName.endsWith('.css')) {
-    cssFiles.push(fileName);
-  } 
-  // 处理 JS
-  else if (fileName.endsWith('.js')) {
-    // 修复点1: 修正了 full\Tag 的拼写错误
-    // 修复点2: 在 async/defer 前加空格，确保匹配的是属性而不是文件名
-    if (fullTag.includes('type="module"') || 
-        fullTag.includes(' async') || 
-        fullTag.includes(' defer')) {
-      jsFiles.async.push(fileName);
-    } else {
-      jsFiles.sync.push(fileName);
-    }
+    cssFileName = fileName;
+  } else if (fileName.endsWith('.js')) {
+    // 这里我们把所有 JS 文件都加进去
+    // 如果你想区分入口和 chunk，可以用逻辑判断，或者直接全部引入
+    jsFileNames.push(fileName);
   }
-}
-
-console.log(`🔍 检测到 CSS:`, cssFiles.length > 0 ? cssFiles : '无');
-console.log(`🔍 检测到 同步 JS:`, jsFiles.sync.length > 0 ? jsFiles.sync : '无');
-console.log(`🔍 检测到 异步 JS:`, jsFiles.async.length > 0 ? jsFiles.async : '无');
-
-// 5. 构建 Thymeleaf 模板字符串
-let cssImports = '';
-if (cssFiles.length === 0) {
-  console.warn('⚠️ 未检测到 CSS 文件，将使用默认 resource.css');
-  cssImports = '    <link th:href="@{/resource.css}" rel="stylesheet" />\n';
-} else {
-  cssFiles.forEach(file => {
-    cssImports += `    <link th:href="@{/${file}}" rel="stylesheet" />\n`;
-  });
-}
-
-let jsImports = '';
-
-// 引入同步 JS (如果有)
-jsFiles.sync.forEach(file => {
-  jsImports += `    <script th:src="@{/${file}}"></script>\n`;
 });
 
-// 引入异步 JS (Vite Chunk)
-jsFiles.async.forEach(file => {
-  // 根据你的 Vite 构建模式选择:
-  // 方案A (推荐): 现代模式 - 使用 type="module"
-  jsImports += `    <script th:src="@{/${file}}" type="module"></script>\n`;
-  
-  // 方案B: 传统模式 - 使用 async
-  // jsImports += `    <script th:src="@{/${file}}" async></script>\n`;
+// 去重并过滤掉可能的重复项 (比如 main.js 已经在默认值里了)
+jsFileNames = [...new Set(jsFileNames)];
+
+console.log(`🔍 检测到 CSS: ${cssFileName}`);
+console.log(`🔍 检测到 JS:`, jsFileNames);
+// --- 修改结束 ---
+
+// 5. 构建 Thymeleaf 模板字符串
+// 注意：这里需要循环生成 script 标签
+let scriptTags = '';
+jsFileNames.forEach(file => {
+  scriptTags += `    <script th:src="@{/${file}}"></script>\n`;
 });
 
 const THYMELEAF_TEMPLATE = `<!DOCTYPE html>
@@ -94,11 +63,11 @@ const THYMELEAF_TEMPLATE = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <title>React App</title>
-${cssImports}\
+    <link th:href="@{/${cssFileName}}" rel="stylesheet" />
 </head>
 <body>
     <div id="root"></div>
-${jsImports}\
+${scriptTags}\
 </body>
 </html>`;
 
@@ -106,12 +75,10 @@ ${jsImports}\
 function ensureDirAndWrite(file, content) {
   try {
     const dir = path.dirname(file);
-
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
       console.log(`✅ 创建目录: ${dir}`);
     }
-
     fs.writeFileSync(file, content, 'utf-8');
     console.log(`✅ 成功生成: ${file}`);
   } catch (err) {
